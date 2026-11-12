@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controle de horas</title>
+<style>
+:root{--bg:#f3f6fb;--card:#fff;--ink:#14213d;--mute:#5b6b85;--line:#d5dded;--acc:#1f4fd8;--accink:#fff;--ok:#0e7a4b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1624;--card:#18223a;--ink:#e8eefc;--mute:#9aa9c7;--line:#2c3a5c;--acc:#6f95ff;--accink:#0b1226;--ok:#4cd698}}
+:root[data-theme="dark"]{--bg:#0f1624;--card:#18223a;--ink:#e8eefc;--mute:#9aa9c7;--line:#2c3a5c;--acc:#6f95ff;--accink:#0b1226;--ok:#4cd698}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;line-height:1.4}
+main{max-width:720px;margin:0 auto;padding:18px 14px 40px}
+h1{font-size:1.5rem;margin:6px 0 14px}
+.rate{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.rate label{color:var(--mute)}
+input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;min-width:0}
+input:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.rate input{width:90px}
+.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:600px}
+.wd{font-weight:700;color:var(--acc);margin-top:4px;text-transform:capitalize}
+.now{display:block;margin-top:4px;padding:4px 8px;font-size:.8rem;width:100%}
+th,td{padding:8px;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--mute);font-weight:600;font-size:.85rem}
+td.h{font-weight:700;white-space:nowrap}
+tfoot td{border-bottom:0;font-weight:700}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 12px}
+button.p{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:700}
+.x{color:#c0392b;padding:6px 10px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+.tot{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.tot b{font-size:1.5rem;color:var(--ok)}
+.tot span{color:var(--mute);font-size:.9rem;display:block}
+</style>
+</head>
+<body>
+<main>
+<h1>Controle de horas</h1>
+<div class="rate"><label for="rate">Valor por hora (R$)</label><input id="rate" type="number" min="0" step="0.5" value="10" inputmode="decimal"></div>
+<div class="wrap">
+<table>
+<thead><tr><th>Dia</th><th>Chegada</th><th>Saída</th><th>Horas</th><th></th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</div>
+<div class="bar"><button class="p" id="add">Adicionar dia</button><button id="clear">Limpar tudo</button></div>
+<div class="tot">
+<div><span>Total trabalhado</span><b id="th">0h00</b></div>
+<div><span>A pagar (só horas cheias)</span><b id="tv">R$ 0,00</b></div>
+</div>
+</main>
+<script>
+var KEY="controle-horas-v1";
+var rows=[],rate=10;
+function load(){try{var d=JSON.parse(localStorage.getItem(KEY)||"null");if(d){rows=d.rows||[];rate=d.rate||10}}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({rows:rows,rate:rate}))}catch(e){}}
+function today(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function mins(r){
+  if(!r.in||!r.out)return 0;
+  var a=r.in.split(":"),b=r.out.split(":");
+  var m=(+b[0]*60+ +b[1])-(+a[0]*60+ +a[1]);
+  if(m<0)m+=1440;
+  return m;
+}
+function fmt(m){return Math.floor(m/60)+"h"+String(m%60).padStart(2,"0")}
+function brl(v){return "R$ "+v.toFixed(2).replace(".",",").replace(/\B(?=(\d{3})+(?!\d))/g,".")}
+function render(){
+  var tb=document.getElementById("rows");tb.innerHTML="";
+  rows.forEach(function(r,i){
+    var tr=document.createElement("tr");
+    tr.innerHTML='<td><input type="date" value="'+r.date+'" data-i="'+i+'" data-k="date"><div class="wd" id="w'+i+'"></div></td>'+
+    '<td><input type="time" value="'+r.in+'" data-i="'+i+'" data-k="in" id="in'+i+'"><button class="now" data-now="in" data-i="'+i+'">Marcar chegada</button></td>'+
+    '<td><input type="time" value="'+r.out+'" data-i="'+i+'" data-k="out" id="out'+i+'"><button class="now" data-now="out" data-i="'+i+'">Marcar saída</button></td>'+
+    '<td class="h" id="h'+i+'">'+fmt(mins(r))+'</td>'+
+    '<td><button class="x" data-del="'+i+'" aria-label="Remover dia">✕</button></td>';
+    tb.appendChild(tr);
+  });
+  totals();
+}
+var DIAS=["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"];
+function wd(s){if(!s)return "";var p=s.split("-");return DIAS[new Date(+p[0],+p[1]-1,+p[2]).getDay()]}
+function totals(){
+  var t=0;rows.forEach(function(r,i){var m=mins(r);t+=m;var c=document.getElementById("h"+i);if(c)c.textContent=fmt(m);var w=document.getElementById("w"+i);if(w)w.textContent=wd(r.date)});
+  document.getElementById("th").textContent=fmt(t);
+  document.getElementById("tv").textContent=brl(Math.floor(t/60)*rate);
+}
+document.getElementById("rows").addEventListener("input",function(e){
+  var i=e.target.getAttribute("data-i");if(i===null)return;
+  rows[i][e.target.getAttribute("data-k")]=e.target.value;save();totals();
+});
+document.getElementById("rows").addEventListener("click",function(e){
+  var n=e.target.getAttribute("data-now");
+  if(n){var j=+e.target.getAttribute("data-i"),d0=new Date();rows[j][n]=String(d0.getHours()).padStart(2,"0")+":"+String(d0.getMinutes()).padStart(2,"0");save();document.getElementById(n+j).value=rows[j][n];totals();return}
+  var d=e.target.getAttribute("data-del");if(d===null)return;
+  rows.splice(+d,1);save();render();
+});
+document.getElementById("add").onclick=function(){rows.push({date:today(),in:"",out:""});save();render()};
+document.getElementById("clear").onclick=function(){if(confirm("Apagar todos os dias?")){rows=[];save();render()}};
+document.getElementById("rate").oninput=function(e){rate=parseFloat(e.target.value)||0;save();totals()};
+load();
+if(!rows.length)rows.push({date:today(),in:"",out:""});
+document.getElementById("rate").value=rate;
+render();
+</script>
+</body>
+</html>
